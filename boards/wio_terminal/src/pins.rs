@@ -3,7 +3,7 @@ use atsamd_hal::{define_pins, target_device};
 
 use super::buttons::ButtonPins;
 use super::display::Display;
-use super::sensors::{Accelerometer, LightSensor};
+use super::sensors::{Accelerometer, LightSensor, I2C};
 use super::serial::{UART, USB};
 use super::sound::{Buzzer, Microphone};
 use super::storage::{QSPIFlash, SDCard};
@@ -198,6 +198,9 @@ pub struct Sets {
     pub wifi: WifiPins,
 
     pub header_pins: HeaderPins,
+    
+    // I2C
+    pub i2c: I2C,
 }
 
 impl Pins {
@@ -295,6 +298,11 @@ impl Pins {
             dir: self.rtl8720d_dir,
         };
 
+        let i2c = I2C{
+            scl: self.i2c1_scl,
+            sda: self.i2c1_sda,
+        };
+
         Sets {
             accelerometer,
             buzzer,
@@ -310,6 +318,7 @@ impl Pins {
             buttons,
             wifi,
             header_pins,
+            i2c,
         }
     }
 }
