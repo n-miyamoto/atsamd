@@ -1,10 +1,11 @@
 use atsamd_hal::adc::Adc;
 use atsamd_hal::clock::GenericClockController;
-use atsamd_hal::gpio::{Floating, Input, Pa12, Pa13, Pd1, PfB, PfD, Port};
+use atsamd_hal::gpio::{Floating, Input, Pa12, Pa13, Pa16, Pa17, Pd1, PfB, PfD, Port};
 use atsamd_hal::prelude::*;
 use atsamd_hal::sercom::{I2CMaster4, PadPin, Sercom4Pad0, Sercom4Pad1};
+use atsamd_hal::sercom::{I2CMaster3, Sercom3Pad0, Sercom3Pad1};
 use atsamd_hal::target_device::gclk::pchctrl::GEN_A::GCLK11;
-use atsamd_hal::target_device::{ADC1, MCLK, SERCOM4};
+use atsamd_hal::target_device::{ADC1, MCLK, SERCOM3, SERCOM4};
 
 use lis3dh::{Lis3dh, SlaveAddr};
 
@@ -66,5 +67,39 @@ impl LightSensor {
         let pd1 = self.pd1.into_function_b(port);
 
         (adc1, pd1)
+    }
+}
+
+/// general I2C pins (uses `SERCOM3`)
+pub struct I2C{
+    /// `I2C1` bus clock pin
+    pub scl: Pa16<Input<Floating>>,
+
+    /// `I2C1` bus data pin
+    pub sda: Pa17<Input<Floating>>,
+}
+
+impl I2C{
+    pub fn init(
+        self,
+        clocks: &mut GenericClockController,
+        sercom3: SERCOM3,
+        mclk: &mut MCLK,
+        port: &mut Port,
+    ) -> I2CMaster3<Sercom3Pad0<Pa17<PfD>>, Sercom3Pad1<Pa16<PfD>>> {
+        // I2C groove connector is connected to the Wio Terminal's `I2C1` bus, so
+        // based on the possible padouts listed in the datasheet it must use
+        // `SERCOM3` and in turn `I2CMaster3`.
+        let gclk0 = clocks.gclk0();
+        let i2c = I2CMaster3::new(
+            &clocks.sercom3_core(&gclk0).unwrap(),
+            400.khz(),
+            sercom3,
+            mclk,
+            self.sda.into_pad(port),
+            self.scl.into_pad(port),
+        );
+
+        i2c
     }
 }
