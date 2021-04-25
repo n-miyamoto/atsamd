@@ -107,3 +107,6 @@ required-features = ["wifi"]
 
 [[example]]
 name = "i2c"
+
+[[example]]
+name = "wifi_client"

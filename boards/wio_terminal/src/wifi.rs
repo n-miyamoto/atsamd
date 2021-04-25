@@ -207,6 +207,16 @@ impl Wifi {
         }
     }
 
+    pub fn test_socket(&mut self, dom: i32, t : i32, prt :i32) -> Result<i32, erpc::Err<()>> {
+        
+        self.blocking_rpc(rpcs::Socket{
+            domain : dom,
+            t : t,
+            protocol : prt,
+        })
+        .map_err(|_| erpc::Err::RPCErr(()))
+    }
+
     fn recieve_rpc_response<'a, RPC: erpc::RPC>(
         &mut self,
         rpc: &mut RPC,
@@ -281,6 +291,7 @@ impl Wifi {
         self.sequence += 1;
         self.sequence
     }
+
 }
 
 /// Imports necessary for using `wifi_singleton`.
