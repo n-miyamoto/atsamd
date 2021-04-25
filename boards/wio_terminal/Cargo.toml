@@ -41,7 +41,7 @@ nb = { version = "0.1", optional = true }
 nom = { version = "^6.0", default-features = false, optional = true }
 generic-array = { version = "0.14", optional = true }
 #seeed-erpc = { version = "0.1.1", optional = true }
-seeed-erpc = { git = "https://github.com/twitchyliquid64/seeed-erpc-rs" , branch="main" , optional = true}
+seeed-erpc = { git = "https://github.com/n-miyamoto/seeed-erpc-rs", branch="main", optional = true}
 
 [dependencies.atsamd-hal]
 path = "../../hal"
