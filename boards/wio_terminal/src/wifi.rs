@@ -23,6 +23,8 @@ use seeed_erpc as erpc;
 
 use crate::WIFI_UART_BAUD;
 
+use heapless::{consts::U256, String};
+
 /// The set of pins which are connected to the RTL8720 in some way
 pub struct WifiPins {
     pub pwr: Pa18<Input<Floating>>,
@@ -47,6 +49,8 @@ pub struct Wifi {
     tx_buff_input: Producer<'static, U128>,
 
     sequence: u32,
+
+    sock_fd : Option<i32>,
 }
 
 type WifiUART = UART0<Sercom0Pad2<Pc24<PfC>>, Sercom0Pad0<Pb24<PfC>>, (), ()>;
@@ -94,6 +98,7 @@ impl Wifi {
             tx_buff_isr,
             tx_buff_input,
             sequence,
+            sock_fd:None,
         })
     }
 
@@ -255,7 +260,8 @@ impl Wifi {
                 r = Ok(-1i32);
             },
         };
-        //r
+
+        //select
         let mut writeset = erpc::FdSet::new();
         writeset.set(sock as usize);
         let time = Some(erpc::TimeVal{
@@ -282,7 +288,42 @@ impl Wifi {
             },
         };
 
+        //Getsockopt
+        //TODO
+
+        self.sock_fd = Some(sock);
+
         r
+    }
+
+    pub fn send(&mut self, msg : &str) -> Result<i32, erpc::Err<()>> {
+
+        const MSG_DONTWAIT : i32= 0x08;
+        let sock = self.sock_fd.unwrap();
+        let mut data= heapless::Vec::new();
+        let flag = MSG_DONTWAIT;
+        let b: &[u8] = msg.as_bytes();
+        data.extend_from_slice(&b).ok();
+        let ret = self.blocking_rpc(rpcs::Send{
+            s: sock,
+            data: data,
+            flag: flag,
+        });
+        ret
+    }
+
+    pub fn recv(&mut self) -> Result<heapless::Vec<u8, U64>, erpc::Err<()>> {
+        let sock = self.sock_fd.unwrap();
+        let flag = 0i32;
+        let mut data = heapless::Vec::new();
+        let ret = self.blocking_rpc(rpcs::Recv{
+            s: sock,
+            len: 256,
+            timeout : 100*1000,
+            mem: &mut data,
+            flag: flag,
+        });
+        Ok(data)
     }
 
     fn recieve_rpc_response<'a, RPC: erpc::RPC>(

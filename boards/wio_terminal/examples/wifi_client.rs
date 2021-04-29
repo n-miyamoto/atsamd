@@ -101,7 +101,7 @@ fn main() -> ! {
             .map(|wifi| {
                 wifi.connect_to_ap(
                     &mut delay,
-                    "+++", 
+                    "+++",
                     "***",
                     Security::WPA2_SECURITY | Security::AES_ENABLED,
                 )
@@ -124,14 +124,14 @@ fn main() -> ! {
     let ip = 0xBA02A8C0;//192.168.2.186
     let port = 0x3d22; //8765;
     let timeout = 100*1000; //100ms
-    let sock = unsafe {
+    unsafe {
         WIFI.as_mut()
             .map(|wifi| {
                 let r = wifi.connect(ip, port, timeout);
                 match r{
                     Ok(_) => {
 
-                            writeln!(textbuffer, "OK").unwrap();
+                            writeln!(textbuffer, "Connect OK").unwrap();
                             write(&mut display, textbuffer.as_str(), Point::new(3, 74));
                             textbuffer.truncate(0);
                     },
@@ -148,9 +148,66 @@ fn main() -> ! {
             .unwrap()
     };
 
-    writeln!(textbuffer, "socket = {}", sock).unwrap();
+    //send message
+    let msg = "GET host/index.html HTTP/1.1\r\n\r\n";
+
+    writeln!(textbuffer, "{}", msg).unwrap();
     write(&mut display, textbuffer.as_str(), Point::new(3, 94));
     textbuffer.truncate(0);
+
+    let i = unsafe {
+        WIFI.as_mut()
+        .map(|wifi| {
+            let r = wifi.send(&msg);
+            match r{
+                Ok(_) => {
+
+                        writeln!(textbuffer, "send OK").unwrap();
+                        write(&mut display, textbuffer.as_str(), Point::new(3, 114));
+                        textbuffer.truncate(0);
+                },
+                Err(_) => {
+
+                        writeln!(textbuffer, "Err").unwrap();
+                        write(&mut display, textbuffer.as_str(), Point::new(3, 114));
+                        textbuffer.truncate(0);
+                },
+            };
+            let ret = r.unwrap();
+            ret
+        }).unwrap()
+    };
+
+    writeln!(textbuffer, "{}", i).unwrap();
+    write(&mut display, textbuffer.as_str(), Point::new(3, 134));
+    textbuffer.truncate(0);
+
+    //recv message
+    unsafe {
+        WIFI.as_mut()
+        .map(|wifi| {
+            let r = wifi.recv();
+            match r{
+                Ok(a) => {
+                        let text= String::from_utf8(a).unwrap();
+                        //writeln!(text, "recv OK").unwrap();
+                        write(&mut display, text.as_str(), Point::new(3, 154));
+                        textbuffer.truncate(0);
+                },
+                Err(_) => {
+
+                        writeln!(textbuffer, "Err").unwrap();
+                        write(&mut display, textbuffer.as_str(), Point::new(3, 154));
+                        textbuffer.truncate(0);
+                },
+            };
+        }).unwrap()
+    };
+
+    writeln!(textbuffer, "fin recv").unwrap();
+    write(&mut display, textbuffer.as_str(), Point::new(3, 174));
+    textbuffer.truncate(0);
+
 
     loop {
         user_led.toggle();
