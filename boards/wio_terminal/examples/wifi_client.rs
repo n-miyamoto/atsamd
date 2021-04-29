@@ -101,8 +101,8 @@ fn main() -> ! {
             .map(|wifi| {
                 wifi.connect_to_ap(
                     &mut delay,
-                    "illmatic-iot",
-                    "miyamotomarketings4545",
+                    "+++", 
+                    "***", 
                     Security::WPA2_SECURITY | Security::AES_ENABLED,
                 )
                 .unwrap()
@@ -120,20 +120,35 @@ fn main() -> ! {
     write(&mut display, textbuffer.as_str(), Point::new(3, 54));
     textbuffer.truncate(0);
 
-    let AF_INET = 2;
-    let SOCK_STREAM = 1;
-
-    // create socket
+    //connect 
+    let ip = 0xBA02A8C0;//192.168.2.186
+    let port = 0x3d22; //8765;
     let sock = unsafe {
         WIFI.as_mut()
             .map(|wifi| {
-                wifi.test_socket(AF_INET, SOCK_STREAM, 0).unwrap()
+                let r = wifi.connect(ip, port);
+                match r{
+                    Ok(_) => {
+
+                            writeln!(textbuffer, "OK").unwrap();
+                            write(&mut display, textbuffer.as_str(), Point::new(3, 74));
+                            textbuffer.truncate(0);
+                    },
+                    Err(_) => {
+
+                            writeln!(textbuffer, "Err").unwrap();
+                            write(&mut display, textbuffer.as_str(), Point::new(3, 74));
+                            textbuffer.truncate(0);
+                    },
+                };
+                let ret = r.unwrap();
+                ret
             })
             .unwrap()
     };
 
     writeln!(textbuffer, "socket = {}", sock).unwrap();
-    write(&mut display, textbuffer.as_str(), Point::new(3, 74));
+    write(&mut display, textbuffer.as_str(), Point::new(3, 94));
     textbuffer.truncate(0);
 
     loop {

@@ -1,3 +1,4 @@
+
 use atsamd_hal::clock::GenericClockController;
 use atsamd_hal::delay::Delay;
 use atsamd_hal::gpio::*;
@@ -19,6 +20,7 @@ use cortex_m::peripheral::NVIC;
 
 pub use erpc::rpcs;
 use seeed_erpc as erpc;
+use erpc::RPC;
 
 use crate::WIFI_UART_BAUD;
 
@@ -207,14 +209,54 @@ impl Wifi {
         }
     }
 
-    pub fn test_socket(&mut self, dom: i32, t : i32, prt :i32) -> Result<i32, erpc::Err<()>> {
-        
-        self.blocking_rpc(rpcs::Socket{
-            domain : dom,
-            t : t,
-            protocol : prt,
-        })
-        .map_err(|_| erpc::Err::RPCErr(()))
+    pub fn connect(&mut self, ip_addr : u32, port : u16) -> Result<i32, erpc::Err<()>> {
+        let AF_INET = 2;
+        let SOCK_STREAM = 1;
+        let F_GETFL= 3;
+        let F_SETFL= 4;
+        let O_NON_BLOCK= 0x0001;
+        let saddr = erpc::InAddr{s_addr : ip_addr};
+        let serveraddr = erpc::SockaddrIn {
+            sin_len : 0,
+            sin_family : AF_INET as u8,
+            sin_addr : saddr,
+            sin_port : port,
+            sin_zero : [0i8; 8], 
+        };
+        // create socket 
+        let sock = self.blocking_rpc(rpcs::Socket{
+            domain : AF_INET as i32,
+            t : SOCK_STREAM,
+            protocol : 0,
+        }).unwrap();
+
+        let val = self.blocking_rpc(rpcs::Fcntl{
+            s : sock,
+            cmd : F_GETFL,
+            val: 0,
+        }).unwrap();
+        let a = self.blocking_rpc(rpcs::Fcntl{
+            s : sock,
+            cmd : F_SETFL,
+            val : val | O_NON_BLOCK,
+        }).unwrap();
+        let l = core::mem::size_of::<erpc::SockaddrIn>() as u32;
+
+        let ret = self.blocking_rpc(rpcs::Connect{
+            s : sock,
+            name : serveraddr,
+            namelen: l,
+        });
+        let mut r = Ok(0);
+        match ret{
+            Ok(a) => {
+                r = Ok(a as i32);
+            },
+            Err(_) => {
+                r = Ok(-1i32);
+            },
+        };
+        r
     }
 
     fn recieve_rpc_response<'a, RPC: erpc::RPC>(
