@@ -102,7 +102,7 @@ fn main() -> ! {
                 wifi.connect_to_ap(
                     &mut delay,
                     "+++", 
-                    "***", 
+                    "***",
                     Security::WPA2_SECURITY | Security::AES_ENABLED,
                 )
                 .unwrap()
@@ -123,10 +123,11 @@ fn main() -> ! {
     //connect 
     let ip = 0xBA02A8C0;//192.168.2.186
     let port = 0x3d22; //8765;
+    let timeout = 100*1000; //100ms
     let sock = unsafe {
         WIFI.as_mut()
             .map(|wifi| {
-                let r = wifi.connect(ip, port);
+                let r = wifi.connect(ip, port, timeout);
                 match r{
                     Ok(_) => {
 

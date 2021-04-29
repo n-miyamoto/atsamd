@@ -20,7 +20,6 @@ use cortex_m::peripheral::NVIC;
 
 pub use erpc::rpcs;
 use seeed_erpc as erpc;
-use erpc::RPC;
 
 use crate::WIFI_UART_BAUD;
 
@@ -209,7 +208,7 @@ impl Wifi {
         }
     }
 
-    pub fn connect(&mut self, ip_addr : u32, port : u16) -> Result<i32, erpc::Err<()>> {
+    pub fn connect(&mut self, ip_addr : u32, port : u16, timeout :i64) -> Result<i32, erpc::Err<()>> {
         let AF_INET = 2;
         let SOCK_STREAM = 1;
         let F_GETFL= 3;
@@ -256,6 +255,33 @@ impl Wifi {
                 r = Ok(-1i32);
             },
         };
+        //r
+        let mut writeset = erpc::FdSet::new();
+        writeset.set(sock as usize);
+        let time = Some(erpc::TimeVal{
+            tv_sec : 0,
+            tv_usec: timeout,
+        });
+        let ret = self.blocking_rpc(rpcs::Select{
+            s : sock+1,
+            readset : None,
+            writeset: Some(writeset),
+            exceptset: None,
+            timeval: time,
+        });
+        match ret{
+            Ok(res) => {
+                if res == 0{
+                    //close
+                    r=Ok(31);
+                }
+            },
+            Err(_) => {
+                //close
+                r=Ok(21);
+            },
+        };
+
         r
     }
 
