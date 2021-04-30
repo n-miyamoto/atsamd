@@ -20,7 +20,7 @@ use eg::fonts::{Font6x12, Text};
 use eg::pixelcolor::Rgb565;
 use eg::prelude::*;
 use eg::style::TextStyle;
-use heapless::{consts::U256, String};
+use heapless::{consts::U256, consts::U4096, String};
 
 
 
@@ -111,13 +111,7 @@ fn main() -> ! {
     };
     user_led.set_high().ok();
     writeln!(textbuffer, "ip = {}", ip_info.ip).unwrap();
-    write(&mut display, textbuffer.as_str(), Point::new(3, 30));
-    textbuffer.truncate(0);
-    writeln!(textbuffer, "netmask = {}", ip_info.netmask).unwrap();
-    write(&mut display, textbuffer.as_str(), Point::new(3, 42));
-    textbuffer.truncate(0);
-    writeln!(textbuffer, "gateway = {}", ip_info.gateway).unwrap();
-    write(&mut display, textbuffer.as_str(), Point::new(3, 54));
+    write(&mut display, textbuffer.as_str(), Point::new(3, 20));
     textbuffer.truncate(0);
 
     //connect 
@@ -132,13 +126,13 @@ fn main() -> ! {
                     Ok(_) => {
 
                             writeln!(textbuffer, "Connect OK").unwrap();
-                            write(&mut display, textbuffer.as_str(), Point::new(3, 74));
+                            write(&mut display, textbuffer.as_str(), Point::new(3, 34));
                             textbuffer.truncate(0);
                     },
                     Err(_) => {
 
                             writeln!(textbuffer, "Err").unwrap();
-                            write(&mut display, textbuffer.as_str(), Point::new(3, 74));
+                            write(&mut display, textbuffer.as_str(), Point::new(3, 34));
                             textbuffer.truncate(0);
                     },
                 };
@@ -149,27 +143,22 @@ fn main() -> ! {
     };
 
     //send message
-    let msg = "GET host/index.html HTTP/1.1\r\n\r\n";
+    let msg = "GET / HTTP/1.1\r\n\r\n";
 
-    writeln!(textbuffer, "{}", msg).unwrap();
-    write(&mut display, textbuffer.as_str(), Point::new(3, 94));
-    textbuffer.truncate(0);
-
-    let i = unsafe {
+    unsafe {
         WIFI.as_mut()
         .map(|wifi| {
             let r = wifi.send(&msg);
             match r{
                 Ok(_) => {
-
-                        writeln!(textbuffer, "send OK").unwrap();
-                        write(&mut display, textbuffer.as_str(), Point::new(3, 114));
-                        textbuffer.truncate(0);
+                    writeln!(textbuffer, "Ok, msg: {}", msg).unwrap();
+                    write(&mut display, textbuffer.as_str(), Point::new(3, 44));
+                    textbuffer.truncate(0);
                 },
                 Err(_) => {
 
                         writeln!(textbuffer, "Err").unwrap();
-                        write(&mut display, textbuffer.as_str(), Point::new(3, 114));
+                        write(&mut display, textbuffer.as_str(), Point::new(3, 44));
                         textbuffer.truncate(0);
                 },
             };
@@ -178,36 +167,57 @@ fn main() -> ! {
         }).unwrap()
     };
 
-    writeln!(textbuffer, "{}", i).unwrap();
-    write(&mut display, textbuffer.as_str(), Point::new(3, 134));
-    textbuffer.truncate(0);
 
     //recv message
-    unsafe {
-        WIFI.as_mut()
-        .map(|wifi| {
-            let r = wifi.recv();
-            match r{
-                Ok(a) => {
-                        let text= String::from_utf8(a).unwrap();
-                        //writeln!(text, "recv OK").unwrap();
-                        write(&mut display, text.as_str(), Point::new(3, 154));
-                        textbuffer.truncate(0);
-                },
-                Err(_) => {
-
+    let mut text= String::<U4096>::new();
+    let mut countdown = 7u32;
+    let mut body_length = 0;
+    loop {
+        unsafe {
+            WIFI.as_mut()
+            .map(|wifi| {
+                let r = wifi.recv();
+                match r{
+                    Ok(a) => {
+                        let t= String::from_utf8(a).unwrap();
+                        text.push_str(t.as_str()).ok();
+                    },
+                    Err(_) => {
                         writeln!(textbuffer, "Err").unwrap();
-                        write(&mut display, textbuffer.as_str(), Point::new(3, 154));
+                        write(&mut display, textbuffer.as_str(), Point::new(3, 54));
                         textbuffer.truncate(0);
-                },
-            };
-        }).unwrap()
-    };
+                    },
+                };
+            }).unwrap()
+        };
+        countdown-=1;
 
-    writeln!(textbuffer, "fin recv").unwrap();
-    write(&mut display, textbuffer.as_str(), Point::new(3, 174));
+        if body_length == 0 {
+            let ret = find_content_length(&text);
+            match ret{
+                Ok(a) => {                    
+                    body_length = a;
+                    countdown = (a+511)/512;
+                },
+                Err(_) => {}
+            }
+        }
+
+;
+    
+        if countdown == 0 {break;}
+    }
+
+    writeln!(textbuffer, "index : {}", body_length).unwrap();
+    write(&mut display, textbuffer.as_str(), Point::new(3, 54));
     textbuffer.truncate(0);
 
+    write(&mut display, text.as_str(), Point::new(3, 64));
+    textbuffer.truncate(0);
+
+    writeln!(textbuffer, "fin recv").unwrap();
+    write(&mut display, textbuffer.as_str(), Point::new(3, 224));
+    textbuffer.truncate(0);
 
     loop {
         user_led.toggle();
@@ -227,4 +237,53 @@ fn write<'a, T: Into<&'a str>>(display: &mut wio::LCD, text: T, pos: Point) {
         .draw(display)
         .ok()
         .unwrap();
+}
+
+fn find_content_length(text : &heapless::String<U4096>) -> Result<u32, ()>{
+    let s: &str = "Content-Length:";
+    let mut j : usize= 0;
+    let mut p : Option<u32> = None;
+    for i in 0..text.len() as usize{
+        if text.as_bytes()[i] == s.as_bytes()[j]{
+            j+=1;
+        }else if text.as_bytes()[i] == s.as_bytes()[0]{
+            j=1;
+        }else{
+            j=0;
+        }
+
+        if j==s.len() {
+            p = Some(i as u32 + 1);
+            break;
+        }
+    }
+
+    if p==None{
+        return Err(());
+    }
+
+    let p_start = p.unwrap() as usize;
+
+    //find CRLF
+    let mut p_end = 0;
+    for i in p_start..text.len() as usize{
+        let t = text.as_bytes()[i];
+        if t=='\r' as u8 || t=='\n' as u8 {
+            p_end = i;
+            break;
+        }
+    }
+
+    // parse num
+    let mut n = 1u32;
+    let mut ret = 0;
+    for i in (p_start .. p_end).rev() {
+        let t = text.as_bytes()[i];
+        if 0x30u8 <= t && t<= 0x39{
+            ret += n*(t-0x30u8) as u32;
+            n*=10;
+        }
+    }
+
+    Ok(ret)
 }

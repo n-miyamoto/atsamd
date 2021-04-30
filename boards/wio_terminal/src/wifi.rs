@@ -287,13 +287,13 @@ impl Wifi {
         })
     }
 
-    pub fn recv(&mut self) -> Result<heapless::Vec<u8, U64>, erpc::Err<()>> {
+    pub fn recv(&mut self) -> Result<heapless::Vec<u8, U512>, erpc::Err<()>> {
         let sock = self.sock_fd.unwrap();
         let flag = 0i32;
         let mut data = heapless::Vec::new();
         self.blocking_rpc(rpcs::Recv{
             s: sock,
-            len: 256,
+            len: 512,
             timeout : 100*1000,
             mem: &mut data,
             flag: flag,
