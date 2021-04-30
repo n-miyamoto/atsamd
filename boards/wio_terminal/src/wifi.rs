@@ -23,7 +23,13 @@ use seeed_erpc as erpc;
 
 use crate::WIFI_UART_BAUD;
 
-use heapless::{consts::U256, String};
+//const value for socket
+const AF_INET :i32 = 2;
+const SOCK_STREAM :i32 = 1;
+const F_GETFL :i32= 3;
+const F_SETFL :i32=  4;
+const O_NON_BLOCK :i32= 0x0001;
+const MSG_DONTWAIT : i32= 0x08;
 
 /// The set of pins which are connected to the RTL8720 in some way
 pub struct WifiPins {
@@ -214,11 +220,7 @@ impl Wifi {
     }
 
     pub fn connect(&mut self, ip_addr : u32, port : u16, timeout :i64) -> Result<i32, erpc::Err<()>> {
-        let AF_INET = 2;
-        let SOCK_STREAM = 1;
-        let F_GETFL= 3;
-        let F_SETFL= 4;
-        let O_NON_BLOCK= 0x0001;
+
         let saddr = erpc::InAddr{s_addr : ip_addr};
         let serveraddr = erpc::SockaddrIn {
             sin_len : 0,
@@ -239,27 +241,22 @@ impl Wifi {
             cmd : F_GETFL,
             val: 0,
         }).unwrap();
-        let a = self.blocking_rpc(rpcs::Fcntl{
+        self.blocking_rpc(rpcs::Fcntl{
             s : sock,
             cmd : F_SETFL,
             val : val | O_NON_BLOCK,
         }).unwrap();
         let l = core::mem::size_of::<erpc::SockaddrIn>() as u32;
 
-        let ret = self.blocking_rpc(rpcs::Connect{
+        //connect
+        self.blocking_rpc(rpcs::Connect{
             s : sock,
             name : serveraddr,
             namelen: l,
-        });
-        let mut r = Ok(0);
-        match ret{
-            Ok(a) => {
-                r = Ok(a as i32);
-            },
-            Err(_) => {
-                r = Ok(-1i32);
-            },
-        };
+        }).unwrap();
+
+        //connected set socket
+        self.sock_fd = Some(sock);
 
         //select
         let mut writeset = erpc::FdSet::new();
@@ -268,61 +265,39 @@ impl Wifi {
             tv_sec : 0,
             tv_usec: timeout,
         });
-        let ret = self.blocking_rpc(rpcs::Select{
+        self.blocking_rpc(rpcs::Select{
             s : sock+1,
             readset : None,
             writeset: Some(writeset),
             exceptset: None,
             timeval: time,
-        });
-        match ret{
-            Ok(res) => {
-                if res == 0{
-                    //close
-                    r=Ok(31);
-                }
-            },
-            Err(_) => {
-                //close
-                r=Ok(21);
-            },
-        };
-
-        //Getsockopt
-        //TODO
-
-        self.sock_fd = Some(sock);
-
-        r
+        })
     }
 
     pub fn send(&mut self, msg : &str) -> Result<i32, erpc::Err<()>> {
-
-        const MSG_DONTWAIT : i32= 0x08;
         let sock = self.sock_fd.unwrap();
         let mut data= heapless::Vec::new();
         let flag = MSG_DONTWAIT;
         let b: &[u8] = msg.as_bytes();
         data.extend_from_slice(&b).ok();
-        let ret = self.blocking_rpc(rpcs::Send{
+        self.blocking_rpc(rpcs::Send{
             s: sock,
             data: data,
             flag: flag,
-        });
-        ret
+        })
     }
 
     pub fn recv(&mut self) -> Result<heapless::Vec<u8, U64>, erpc::Err<()>> {
         let sock = self.sock_fd.unwrap();
         let flag = 0i32;
         let mut data = heapless::Vec::new();
-        let ret = self.blocking_rpc(rpcs::Recv{
+        self.blocking_rpc(rpcs::Recv{
             s: sock,
             len: 256,
             timeout : 100*1000,
             mem: &mut data,
             flag: flag,
-        });
+        }).unwrap();
         Ok(data)
     }
 
