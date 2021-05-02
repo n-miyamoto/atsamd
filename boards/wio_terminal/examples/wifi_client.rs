@@ -114,23 +114,25 @@ fn main() -> ! {
     write(&mut display, textbuffer.as_str(), Point::new(3, 20));
     textbuffer.truncate(0);
 
+    delay.delay_ms(1000u32);
+
     //connect 
-    let ip = 0xBA02A8C0;//192.168.2.186
-    let port = 0x3d22; //8765;
-    let timeout = 100*1000; //100ms
+    //let ip = 0xBA02A8C0;//192.168.2.186
+    let ip = 0x3BCE4136;//54.65.206.59
+    //let port = 0x3d22; //8765;
+    let port = 0x5000; //80;
+    let timeout = 4000*1000; //100ms
     unsafe {
         WIFI.as_mut()
             .map(|wifi| {
                 let r = wifi.connect(ip, port, timeout);
                 match r{
                     Ok(_) => {
-
-                            writeln!(textbuffer, "Connect OK").unwrap();
+                            writeln!(textbuffer, "Connect OK : {}", ip).unwrap();
                             write(&mut display, textbuffer.as_str(), Point::new(3, 34));
                             textbuffer.truncate(0);
                     },
                     Err(_) => {
-
                             writeln!(textbuffer, "Err").unwrap();
                             write(&mut display, textbuffer.as_str(), Point::new(3, 34));
                             textbuffer.truncate(0);
@@ -143,50 +145,75 @@ fn main() -> ! {
     };
 
     //send message
-    let msg = "GET / HTTP/1.1\r\n\r\n";
+    let mut bodybuffer = String::<U256>::new();
+    let mut headerbuffer = String::<U256>::new();
+    let channel_id : u32 = 12345;
+    let writekey = "***";
+    let d1 = 16.0;
+    let d2 = 81.2;
+    let d3 = 53.4;
+    // create JSON body
+    writeln!(bodybuffer, "{{\"writeKey\":\"{}\",\"d1\":\"{}\",\"d2\":\"{}\",\"d3\":\"{}\"}}",
+                           writekey,
+                           d1, d2, d3,
+    ).unwrap();
 
-    unsafe {
-        WIFI.as_mut()
-        .map(|wifi| {
-            let r = wifi.send(&msg);
-            match r{
-                Ok(_) => {
-                    writeln!(textbuffer, "Ok, msg: {}", msg).unwrap();
-                    write(&mut display, textbuffer.as_str(), Point::new(3, 44));
-                    textbuffer.truncate(0);
-                },
-                Err(_) => {
+    // create header
+    writeln!(headerbuffer, "POST /api/v2/channels/{}/data HTTP/1.1\r\n\
+                  Host: 54.65.206.59\r\n\
+                  Content-Type: application/json\r\n\
+                  Content-Length: {}\r\n\r\n{}",
+                  channel_id,
+                  bodybuffer.len(),
+                  bodybuffer,
+    ).unwrap();
 
-                        writeln!(textbuffer, "Err").unwrap();
-                        write(&mut display, textbuffer.as_str(), Point::new(3, 44));
-                        textbuffer.truncate(0);
-                },
-            };
-            let ret = r.unwrap();
-            ret
-        }).unwrap()
-    };
+    writeln!(textbuffer, "Ok, header: {} ", headerbuffer.len()).unwrap();
+    write(&mut display, textbuffer.as_str(), Point::new(3, 44));
+    textbuffer.truncate(0);
 
+    let n = (headerbuffer.len()+39)/40;
+    for i in 0..n{
+        unsafe {
+            WIFI.as_mut()
+            .map(|wifi| {
+                let r = wifi.send(&headerbuffer.as_str()[40*i.. core::cmp::min(40*(i+1),headerbuffer.len())]);
+                match r{
+                    Ok(_) => {
+                    },
+                    Err(_) => {
+
+                            writeln!(textbuffer, "Err").unwrap();
+                            write(&mut display, textbuffer.as_str(), Point::new(3, 44));
+                            textbuffer.truncate(0);
+                    },
+                };
+                let ret = r.unwrap();
+                ret
+            }).unwrap()
+        };
+    }
+
+    writeln!(textbuffer, "{}", bodybuffer).unwrap();
+    write(&mut display, textbuffer.as_str(), Point::new(3, 60));
+    textbuffer.truncate(0);
 
     //recv message
     let mut text= String::<U4096>::new();
     let mut countdown = 7u32;
     let mut body_length = 0;
+
     loop {
         unsafe {
             WIFI.as_mut()
             .map(|wifi| {
                 let r = wifi.recv();
                 match r{
-                    Ok(a) => {
-                        let t= String::from_utf8(a).unwrap();
+                    Ok(txt) => {
+                        let t= String::from_utf8(txt).unwrap();
                         text.push_str(t.as_str()).ok();
                     },
-                    Err(_) => {
-                        writeln!(textbuffer, "Err").unwrap();
-                        write(&mut display, textbuffer.as_str(), Point::new(3, 54));
-                        textbuffer.truncate(0);
-                    },
+                    Err(_) => {},
                 };
             }).unwrap()
         };
@@ -198,25 +225,22 @@ fn main() -> ! {
                 Ok(a) => {                    
                     body_length = a;
                     countdown = (a+511)/512;
+                    writeln!(textbuffer, "content length : {}", body_length).unwrap();
+                    write(&mut display, textbuffer.as_str(), Point::new(3, 75));
+                    textbuffer.truncate(0)
                 },
                 Err(_) => {}
             }
         }
 
-;
-    
         if countdown == 0 {break;}
     }
 
-    writeln!(textbuffer, "index : {}", body_length).unwrap();
-    write(&mut display, textbuffer.as_str(), Point::new(3, 54));
-    textbuffer.truncate(0);
-
-    write(&mut display, text.as_str(), Point::new(3, 64));
+    write(&mut display, text.as_str(), Point::new(3, 100));
     textbuffer.truncate(0);
 
     writeln!(textbuffer, "fin recv").unwrap();
-    write(&mut display, textbuffer.as_str(), Point::new(3, 224));
+    write(&mut display, textbuffer.as_str(), Point::new(3, 90));
     textbuffer.truncate(0);
 
     loop {
@@ -240,7 +264,7 @@ fn write<'a, T: Into<&'a str>>(display: &mut wio::LCD, text: T, pos: Point) {
 }
 
 fn find_content_length(text : &heapless::String<U4096>) -> Result<u32, ()>{
-    let s: &str = "Content-Length:";
+    let s: &str = "content-length:"; //need fix
     let mut j : usize= 0;
     let mut p : Option<u32> = None;
     for i in 0..text.len() as usize{
