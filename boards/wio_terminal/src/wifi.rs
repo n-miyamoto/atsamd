@@ -219,6 +219,35 @@ impl Wifi {
         }
     }
 
+
+    pub fn get_host_address(&mut self, host : &str) -> Result<i8, erpc::Err<()>> {
+        //TODO : not working
+        const LWIP_DNS_ADDRTYPE_IPV4 : u8 = 0;
+        let mut serveraddr = erpc::IpAddrType{
+            addr : [0u32;4],
+            t : 0 ,
+            len : 0,
+        };
+        
+        let mut hostname = heapless::Vec::new();
+        hostname.extend_from_slice(host.as_bytes()).ok();
+        let mut c = heapless::Vec::new();
+        let arg = 1u32;
+        c.extend_from_slice(&arg.to_le_bytes()).ok();
+        c.extend_from_slice(&arg.to_le_bytes()).ok();
+        let callback = Some(c);
+        let dns_addrtype = LWIP_DNS_ADDRTYPE_IPV4;
+
+        let ret = self.blocking_rpc(rpcs::GethostbynameAddrtype{
+            hostname: hostname,
+            ip_addr: &mut serveraddr,
+            found: 1u32,
+            callback_arg : callback,
+            dns_addrtype : dns_addrtype,
+        });
+        ret
+    }
+
     pub fn connect(&mut self, ip_addr : u32, port : u16, timeout :i64) -> Result<i32, erpc::Err<()>> {
 
         let saddr = erpc::InAddr{s_addr : ip_addr};
@@ -291,14 +320,25 @@ impl Wifi {
         let sock = self.sock_fd.unwrap();
         let flag = 0i32;
         let mut data = heapless::Vec::new();
-        self.blocking_rpc(rpcs::Recv{
+        let res = self.blocking_rpc(rpcs::Recv{
             s: sock,
             len: 512,
-            timeout : 100*1000,
+            timeout : 10000*1000,
             mem: &mut data,
             flag: flag,
-        }).unwrap();
-        Ok(data)
+        });
+        let mut ret = Ok(data);
+        match res{
+            Ok(r) => {
+                if r<0{
+                    ret = Err(erpc::Err::NotOurs);
+                }
+            },
+            Err(_) => {
+                ret = Err(erpc::Err::NotOurs);
+            },
+        }
+        ret
     }
 
     fn recieve_rpc_response<'a, RPC: erpc::RPC>(
