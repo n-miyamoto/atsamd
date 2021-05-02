@@ -341,6 +341,19 @@ impl Wifi {
         ret
     }
 
+    pub fn close(&mut self) -> Result<i32, erpc::Err<()>> {
+        let sock = self.sock_fd.unwrap();
+
+        let ret = self.blocking_rpc(rpcs::Close{
+            s: sock,
+        });
+        
+        //connected set socket
+        self.sock_fd = None;
+
+        ret
+    }
+
     fn recieve_rpc_response<'a, RPC: erpc::RPC>(
         &mut self,
         rpc: &mut RPC,

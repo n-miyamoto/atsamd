@@ -243,6 +243,26 @@ fn main() -> ! {
     write(&mut display, textbuffer.as_str(), Point::new(3, 90));
     textbuffer.truncate(0);
 
+    unsafe {
+        WIFI.as_mut()
+            .map(|wifi| {
+                let r = wifi.close();
+                match r{
+                    Ok(ret) => {
+                            writeln!(textbuffer, "Connection closed {}", ret).unwrap();
+                            write(&mut display, textbuffer.as_str(), Point::new(3, 220));
+                            textbuffer.truncate(0);
+                    },
+                    Err(_) => {
+                            writeln!(textbuffer, "Err").unwrap();
+                            write(&mut display, textbuffer.as_str(), Point::new(3, 220));
+                            textbuffer.truncate(0);
+                    },
+                };
+            })
+            .unwrap()
+    };
+
     loop {
         user_led.toggle();
         delay.delay_ms(200u8);
