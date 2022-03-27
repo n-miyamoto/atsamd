@@ -7,19 +7,17 @@ use wio_terminal as wio;
 
 use eg::pixelcolor::Rgb565;
 use eg::prelude::*;
-use eg::primitives::{circle::Circle, rectangle::Rectangle, triangle::Triangle};
-use eg::style::{PrimitiveStyle, PrimitiveStyleBuilder};
+use eg::primitives::{Circle, PrimitiveStyle, PrimitiveStyleBuilder, Rectangle, Triangle};
 
 use wio::hal::clock::GenericClockController;
 use wio::hal::delay::Delay;
 use wio::pac::{interrupt, CorePeripherals, Peripherals};
 use wio::prelude::*;
-use wio::{button_interrupt, entry, Button, ButtonController, ButtonEvent, Pins, Sets};
+use wio::{button_interrupt, entry, Button, ButtonController, ButtonEvent};
 
 use cortex_m::interrupt::{free as disable_interrupts, CriticalSection};
 
-use heapless::consts::U8;
-use heapless::spsc::Queue;
+use heapless::{consts::U8, spsc::Queue};
 
 #[entry]
 fn main() -> ! {
@@ -35,8 +33,7 @@ fn main() -> ! {
     );
     let mut delay = Delay::new(core.SYST, &mut clocks);
 
-    let pins = Pins::new(peripherals.PORT);
-    let mut sets: Sets = pins.split();
+    let sets = wio::Pins::new(peripherals.PORT).split();
 
     // Initialize the ILI9341-based LCD display. Create a black backdrop the size of
     // the screen, load an image of Ferris from a RAW file, and draw it to the
@@ -48,7 +45,6 @@ fn main() -> ! {
             &mut clocks,
             peripherals.SERCOM7,
             &mut peripherals.MCLK,
-            &mut sets.port,
             58.mhz(),
             &mut delay,
         )
@@ -57,15 +53,13 @@ fn main() -> ! {
     let style = PrimitiveStyleBuilder::new()
         .fill_color(Rgb565::BLACK)
         .build();
-    let backdrop = Rectangle::new(Point::new(0, 0), Point::new(320, 320)).into_styled(style);
+    let backdrop =
+        Rectangle::with_corners(Point::new(0, 0), Point::new(320, 320)).into_styled(style);
     backdrop.draw(&mut display).unwrap();
 
-    let button_ctrlr = sets.buttons.init(
-        peripherals.EIC,
-        &mut clocks,
-        &mut peripherals.MCLK,
-        &mut sets.port,
-    );
+    let button_ctrlr = sets
+        .buttons
+        .init(peripherals.EIC, &mut clocks, &mut peripherals.MCLK);
     let nvic = &mut core.NVIC;
     disable_interrupts(|_| unsafe {
         button_ctrlr.enable(nvic);
@@ -89,14 +83,13 @@ fn main() -> ! {
     }
 }
 
-fn draw_button_marker<D: DrawTarget<Rgb565>>(
-    display: &mut D,
-    button: Button,
-    style: PrimitiveStyle<Rgb565>,
-) {
+fn draw_button_marker<D>(display: &mut D, button: Button, style: PrimitiveStyle<Rgb565>)
+where
+    D: DrawTarget<Color = Rgb565>,
+{
     match button {
         Button::TopLeft => {
-            Rectangle::new(Point::new(5, 5), Point::new(5, 35))
+            Rectangle::with_corners(Point::new(5, 5), Point::new(5, 35))
                 .into_styled(style)
                 .draw(display)
                 .ok();
@@ -106,7 +99,7 @@ fn draw_button_marker<D: DrawTarget<Rgb565>>(
                 .ok();
         }
         Button::TopMiddle => {
-            Rectangle::new(Point::new(80, 5), Point::new(80, 35))
+            Rectangle::with_corners(Point::new(80, 5), Point::new(80, 35))
                 .into_styled(style)
                 .draw(display)
                 .ok();
@@ -116,7 +109,7 @@ fn draw_button_marker<D: DrawTarget<Rgb565>>(
                 .ok();
         }
         Button::Left => {
-            Rectangle::new(Point::new(90, 120), Point::new(120, 120))
+            Rectangle::with_corners(Point::new(90, 120), Point::new(120, 120))
                 .into_styled(style)
                 .draw(display)
                 .ok();
@@ -130,7 +123,7 @@ fn draw_button_marker<D: DrawTarget<Rgb565>>(
             .ok();
         }
         Button::Right => {
-            Rectangle::new(Point::new(190, 120), Point::new(220, 120))
+            Rectangle::with_corners(Point::new(190, 120), Point::new(220, 120))
                 .into_styled(style)
                 .draw(display)
                 .ok();
@@ -144,7 +137,7 @@ fn draw_button_marker<D: DrawTarget<Rgb565>>(
             .ok();
         }
         Button::Down => {
-            Rectangle::new(Point::new(160, 150), Point::new(160, 180))
+            Rectangle::with_corners(Point::new(160, 150), Point::new(160, 180))
                 .into_styled(style)
                 .draw(display)
                 .ok();
@@ -158,7 +151,7 @@ fn draw_button_marker<D: DrawTarget<Rgb565>>(
             .ok();
         }
         Button::Up => {
-            Rectangle::new(Point::new(160, 60), Point::new(160, 90))
+            Rectangle::with_corners(Point::new(160, 60), Point::new(160, 90))
                 .into_styled(style)
                 .draw(display)
                 .ok();

@@ -11,20 +11,20 @@ use embedded_graphics as eg;
 use panic_halt as _;
 use wio_terminal as wio;
 
-use eg::fonts::{Font24x32, Text};
+use eg::mono_font::{ascii::FONT_10X20, MonoTextStyle};
 use eg::pixelcolor::Rgb565;
 use eg::prelude::*;
-use eg::primitives::rectangle::Rectangle;
-use eg::style::{PrimitiveStyleBuilder, TextStyle};
+use eg::primitives::{PrimitiveStyleBuilder, Rectangle};
+use eg::text::Text;
 
 use cortex_m::interrupt::free as disable_interrupts;
 use cortex_m::peripheral::NVIC;
 
+use wio::entry;
 use wio::hal::clock::GenericClockController;
 use wio::hal::delay::Delay;
 use wio::pac::{interrupt, CorePeripherals, Peripherals};
 use wio::prelude::*;
-use wio::{entry, Pins, Sets};
 
 use core::fmt::Write;
 use heapless::consts::U16;
@@ -50,8 +50,7 @@ fn main() -> ! {
     );
 
     let mut delay = Delay::new(core.SYST, &mut clocks);
-    let pins = Pins::new(peripherals.PORT);
-    let mut sets: Sets = pins.split();
+    let sets = wio::Pins::new(peripherals.PORT).split();
 
     // Configure the RTC. a 1024 Hz clock is configured for us when enabling our
     // main clock
@@ -69,12 +68,11 @@ fn main() -> ! {
             &mut clocks,
             peripherals.SERCOM7,
             &mut peripherals.MCLK,
-            &mut sets.port,
             58.mhz(),
             &mut delay,
         )
         .unwrap();
-    Rectangle::new(Point::new(0, 0), Point::new(320, 240))
+    Rectangle::with_corners(Point::new(0, 0), Point::new(320, 240))
         .into_styled(
             PrimitiveStyleBuilder::new()
                 .fill_color(Rgb565::BLACK)
@@ -94,9 +92,9 @@ fn main() -> ! {
         USB_ALLOCATOR.as_ref().unwrap()
     };
     unsafe {
-        USB_SERIAL = Some(SerialPort::new(&bus_allocator));
+        USB_SERIAL = Some(SerialPort::new(bus_allocator));
         USB_BUS = Some(
-            UsbDeviceBuilder::new(&bus_allocator, UsbVidPid(0x16c0, 0x27dd))
+            UsbDeviceBuilder::new(bus_allocator, UsbVidPid(0x16c0, 0x27dd))
                 .manufacturer("Fake company")
                 .product("Serial port")
                 .serial_number("TEST")
@@ -113,10 +111,10 @@ fn main() -> ! {
         NVIC::unmask(interrupt::USB_TRCPT1);
     }
 
-    let style = TextStyle::new(Font24x32, Rgb565::WHITE);
+    let style = MonoTextStyle::new(&FONT_10X20, Rgb565::WHITE);
 
     loop {
-        delay.delay_ms(1000 as u16);
+        delay.delay_ms(1000_u16);
         let time =
             disable_interrupts(|_| unsafe { RTC.as_mut().map(|rtc| rtc.current_time()) }).unwrap();
 
@@ -129,7 +127,7 @@ fn main() -> ! {
         .ok()
         .unwrap();
 
-        Rectangle::new(Point::new(55, 80), Point::new(250, 112))
+        Rectangle::with_corners(Point::new(55, 80), Point::new(250, 112))
             .into_styled(
                 PrimitiveStyleBuilder::new()
                     .fill_color(Rgb565::BLACK)
@@ -139,8 +137,7 @@ fn main() -> ! {
             .ok()
             .unwrap();
 
-        Text::new(data.as_str(), Point::new(55, 80))
-            .into_styled(style)
+        Text::new(data.as_str(), Point::new(55, 80), style)
             .draw(&mut display)
             .ok()
             .unwrap();
@@ -154,8 +151,8 @@ static mut RTC: Option<rtc::Rtc<rtc::ClockMode>> = None;
 
 fn poll_usb() {
     unsafe {
-        USB_BUS.as_mut().map(|usb_dev| {
-            USB_SERIAL.as_mut().map(|serial| {
+        if let Some(usb_dev) = USB_BUS.as_mut() {
+            if let Some(serial) = USB_SERIAL.as_mut() {
                 usb_dev.poll(&mut [serial]);
                 let mut buf = [0u8; 32];
 
@@ -167,8 +164,9 @@ fn poll_usb() {
                         match timespec(buffer) {
                             Ok((remaining, time)) => {
                                 buffer = remaining;
+
                                 disable_interrupts(|_| {
-                                    RTC.as_mut().map(|rtc| {
+                                    if let Some(rtc) = RTC.as_mut() {
                                         rtc.set_time(rtc::Datetime {
                                             seconds: time.second as u8,
                                             minutes: time.minute as u8,
@@ -177,15 +175,15 @@ fn poll_usb() {
                                             month: 0,
                                             year: 0,
                                         });
-                                    });
+                                    }
                                 });
                             }
                             _ => break,
                         };
                     }
                 };
-            });
-        });
+            }
+        }
     };
 }
 
@@ -215,7 +213,7 @@ fn atoi(digits: &[u8]) -> u32 {
     let mut num: u32 = 0;
     let len = digits.len();
     for (i, digit) in digits.iter().enumerate() {
-        let digit = (*digit - '0' as u8) as u32;
+        let digit = (*digit - b'0') as u32;
         let mut exp = 1;
         for _ in 0..(len - i - 1) {
             exp *= 10;
@@ -225,9 +223,8 @@ fn atoi(digits: &[u8]) -> u32 {
     num
 }
 
-#[macro_use]
-extern crate nom;
 use nom::character::streaming::digit1 as nom_ascii_digit;
+use nom::{char, do_parse, opt, tag};
 
 nom::named!(
     pub timespec<Time>,

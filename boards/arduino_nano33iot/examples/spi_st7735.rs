@@ -1,13 +1,20 @@
 #![no_std]
 #![no_main]
 
-extern crate arduino_nano33iot as hal;
-extern crate embedded_graphics;
-extern crate st7735_lcd;
+use arduino_nano33iot as bsp;
+use bsp::hal;
 
+use embedded_graphics;
+use st7735_lcd;
+
+#[cfg(not(feature = "use_semihosting"))]
+use panic_halt as _;
+#[cfg(feature = "use_semihosting")]
+use panic_semihosting as _;
+
+use bsp::entry;
 use hal::clock::GenericClockController;
 use hal::delay::Delay;
-use hal::entry;
 use hal::pac::{CorePeripherals, Peripherals};
 use hal::prelude::*;
 use hal::time::MegaHertz;
@@ -16,8 +23,7 @@ use embedded_graphics::{
     image::{Image, ImageRaw, ImageRawLE},
     pixelcolor::Rgb565,
     prelude::*,
-    primitives::rectangle::Rectangle,
-    style::PrimitiveStyleBuilder,
+    primitives::{PrimitiveStyleBuilder, Rectangle},
 };
 
 use st7735_lcd::Orientation;
@@ -34,12 +40,12 @@ fn main() -> ! {
         &mut peripherals.SYSCTRL,
         &mut peripherals.NVMCTRL,
     );
-    let mut pins = hal::Pins::new(peripherals.PORT);
+    let pins = bsp::Pins::new(peripherals.PORT);
     let mut delay = Delay::new(core.SYST, &mut clocks);
 
     delay.delay_ms(BOOT_DELAY_MS);
 
-    let spi = hal::spi_master(
+    let spi = bsp::spi_master(
         &mut clocks,
         MegaHertz(16),
         peripherals.SERCOM1,
@@ -47,11 +53,10 @@ fn main() -> ! {
         pins.led_sck,
         pins.mosi,
         pins.miso,
-        &mut pins.port,
     );
 
-    let dc = pins.d6.into_open_drain_output(&mut pins.port);
-    let rst = pins.d9.into_open_drain_output(&mut pins.port);
+    let dc = pins.d6.into_push_pull_output();
+    let rst = pins.d9.into_push_pull_output();
 
     let mut disp = st7735_lcd::ST7735::new(spi, dc, rst, true, false, 160, 128);
 
@@ -60,14 +65,17 @@ fn main() -> ! {
     let style = PrimitiveStyleBuilder::new()
         .fill_color(Rgb565::BLACK)
         .build();
-    let black_backdrop = Rectangle::new(Point::new(0, 0), Point::new(160, 128)).into_styled(style);
-    black_backdrop.draw(&mut disp).unwrap();
+
+    Rectangle::with_corners(Point::new(0, 0), Point::new(160, 128))
+        .into_styled(style)
+        .draw(&mut disp)
+        .unwrap();
 
     disp.set_offset(0, 25);
 
     // draw ferris
-    let image_raw: ImageRawLE<Rgb565> = ImageRaw::new(include_bytes!("assets/ferris.raw"), 86, 64);
-    let image: Image<_, Rgb565> = Image::new(&image_raw, Point::new(34, 8));
+    let image_raw: ImageRawLE<Rgb565> = ImageRaw::new(include_bytes!("assets/ferris.raw"), 86);
+    let image = Image::new(&image_raw, Point::new(34, 8));
     image.draw(&mut disp).unwrap();
 
     loop {}

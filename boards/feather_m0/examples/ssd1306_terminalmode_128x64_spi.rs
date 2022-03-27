@@ -50,25 +50,23 @@
 #![no_std]
 #![no_main]
 
-extern crate embedded_graphics;
-extern crate feather_m0 as hal;
-extern crate ssd1306;
-
-// how to panic...
 #[cfg(not(feature = "use_semihosting"))]
-extern crate panic_halt;
+use panic_halt as _;
 #[cfg(feature = "use_semihosting")]
-extern crate panic_semihosting;
+use panic_semihosting as _;
 
+use bsp::hal;
+use bsp::pac;
+use feather_m0 as bsp;
+
+use bsp::{entry, periph_alias, pin_alias};
 use hal::clock::GenericClockController;
 use hal::delay::Delay;
-use hal::entry;
-use hal::pac::{CorePeripherals, Peripherals};
 use hal::prelude::*;
 use hal::time::MegaHertz;
+use pac::{CorePeripherals, Peripherals};
 
-use ssd1306::prelude::*;
-use ssd1306::Builder;
+use ssd1306::{prelude::*, Ssd1306};
 
 use core::fmt::Write;
 
@@ -82,31 +80,30 @@ fn main() -> ! {
         &mut peripherals.SYSCTRL,
         &mut peripherals.NVMCTRL,
     );
-    let mut pins = hal::Pins::new(peripherals.PORT);
-    let mut red_led = pins.d13.into_open_drain_output(&mut pins.port);
+    let pins = bsp::Pins::new(peripherals.PORT);
+    let mut red_led: bsp::RedLed = pin_alias!(pins.red_led).into();
     let mut delay = Delay::new(core.SYST, &mut clocks);
-    let spi = hal::spi_master(
+    let spi_sercom = periph_alias!(peripherals.spi_sercom);
+    let spi = bsp::spi_master(
         &mut clocks,
         MegaHertz(10),
-        peripherals.SERCOM4,
+        spi_sercom,
         &mut peripherals.PM,
-        pins.sck,
+        pins.sclk,
         pins.mosi,
         pins.miso,
-        &mut pins.port,
     );
 
-    let dc = pins.d6.into_open_drain_output(&mut pins.port);
-    let mut rst = pins.d9.into_open_drain_output(&mut pins.port);
+    let dc: bsp::Ssd1306Dc = pin_alias!(pins.ssd1306_dc).into();
+    let mut rst: bsp::Ssd1306Rst = pin_alias!(pins.ssd1306_rst).into();
 
     // NOTE the `DisplaySize` enum comes from the ssd1306 package,
     // and currently only supports certain display sizes; see
     // https://jamwaffles.github.io/ssd1306/master/ssd1306/prelude/enum.DisplaySize.html
     // - Display128x64 is the default, just being explicit here
-    let mut disp: TerminalMode<_> = Builder::new()
-        .size(DisplaySize::Display128x64)
-        .connect_spi(spi, dc)
-        .into();
+    let interface = SPIInterfaceNoCS::new(spi, dc);
+    let mut disp =
+        Ssd1306::new(interface, DisplaySize128x64, DisplayRotation::Rotate0).into_terminal_mode();
 
     disp.reset(&mut rst, &mut delay).unwrap();
     disp.init().unwrap();

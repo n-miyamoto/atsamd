@@ -7,17 +7,17 @@ use embedded_graphics as eg;
 use panic_halt as _;
 use wio_terminal as wio;
 
-use eg::fonts::{Font12x16, Text};
+use eg::mono_font::{ascii::FONT_9X15, MonoTextStyle};
 use eg::pixelcolor::Rgb565;
 use eg::prelude::*;
-use eg::primitives::rectangle::Rectangle;
-use eg::style::{PrimitiveStyleBuilder, TextStyle};
+use eg::primitives::{PrimitiveStyleBuilder, Rectangle};
+use eg::text::Text;
 
+use wio::entry;
 use wio::hal::clock::GenericClockController;
 use wio::hal::delay::Delay;
 use wio::pac::{CorePeripherals, Peripherals};
 use wio::prelude::*;
-use wio::{entry, Pins, Sets};
 
 use core::fmt::Write;
 use heapless::consts::U128;
@@ -40,8 +40,7 @@ fn main() -> ! {
     );
 
     let mut delay = Delay::new(core.SYST, &mut clocks);
-    let pins = Pins::new(peripherals.PORT);
-    let mut sets: Sets = pins.split();
+    let sets = wio::Pins::new(peripherals.PORT).split();
 
     let (mut cont, _sd_present) = sets
         .sd_card
@@ -49,7 +48,6 @@ fn main() -> ! {
             &mut clocks,
             peripherals.SERCOM6,
             &mut peripherals.MCLK,
-            &mut sets.port,
             Clock,
         )
         .unwrap();
@@ -62,13 +60,12 @@ fn main() -> ! {
             &mut clocks,
             peripherals.SERCOM7,
             &mut peripherals.MCLK,
-            &mut sets.port,
             24.mhz(),
             &mut delay,
         )
         .unwrap();
 
-    let style = TextStyle::new(Font12x16, Rgb565::WHITE);
+    let style = MonoTextStyle::new(&FONT_9X15, Rgb565::WHITE);
 
     loop {
         match cont.device().init() {
@@ -83,8 +80,7 @@ fn main() -> ! {
                     Ok(size) => writeln!(data, "{}Mb", size / 1024 / 1024).unwrap(),
                     Err(e) => writeln!(data, "Err: {:?}", e).unwrap(),
                 }
-                Text::new(data.as_str(), Point::new(4, 2))
-                    .into_styled(style)
+                Text::new(data.as_str(), Point::new(4, 2), style)
                     .draw(&mut display)
                     .ok()
                     .unwrap();
@@ -92,8 +88,7 @@ fn main() -> ! {
                 if let Err(e) = print_contents(&mut cont, &mut display) {
                     let mut data = String::<U128>::new();
                     writeln!(data, "Err: {:?}", e).unwrap();
-                    Text::new(data.as_str(), Point::new(4, 20))
-                        .into_styled(style)
+                    Text::new(data.as_str(), Point::new(4, 20), style)
                         .draw(&mut display)
                         .ok()
                         .unwrap();
@@ -102,16 +97,15 @@ fn main() -> ! {
             Err(e) => {
                 let mut data = String::<U128>::new();
                 writeln!(data, "Error!: {:?}", e).unwrap();
-                Text::new(data.as_str(), Point::new(4, 2))
-                    .into_styled(style)
+                Text::new(data.as_str(), Point::new(4, 2), style)
                     .draw(&mut display)
                     .ok()
                     .unwrap();
             }
         }
 
-        delay.delay_ms(2500 as u16);
-        Rectangle::new(Point::new(0, 0), Point::new(320, 240))
+        delay.delay_ms(2500_u16);
+        Rectangle::with_corners(Point::new(0, 0), Point::new(320, 240))
             .into_styled(
                 PrimitiveStyleBuilder::new()
                     .fill_color(Rgb565::BLACK)
@@ -127,7 +121,7 @@ fn print_contents(
     cont: &mut SDCardController<Clock>,
     lcd: &mut wio::LCD,
 ) -> Result<(), embedded_sdmmc::Error<embedded_sdmmc::SdMmcError>> {
-    let style = TextStyle::new(Font12x16, Rgb565::WHITE);
+    let style = MonoTextStyle::new(&FONT_9X15, Rgb565::WHITE);
 
     let volume = cont.get_volume(VolumeIdx(0))?;
     let dir = cont.open_root_dir(&volume)?;
@@ -136,8 +130,7 @@ fn print_contents(
     let out = cont.iterate_dir(&volume, &dir, |ent| {
         let mut data = String::<U128>::new();
         writeln!(data, "{} - {:?}", ent.name, ent.attributes).unwrap();
-        Text::new(data.as_str(), Point::new(4, 20 + count * 16))
-            .into_styled(style)
+        Text::new(data.as_str(), Point::new(4, 20 + count * 16), style)
             .draw(lcd)
             .ok()
             .unwrap();
