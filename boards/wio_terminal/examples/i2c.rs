@@ -11,16 +11,27 @@ use wio::pac::{CorePeripherals, Peripherals};
 use wio::prelude::*;
 use wio::{entry, Pins, Sets};
 use wio::{Scroller, LCD};
-use wio::hal::sercom::{I2CMaster3, Sercom3Pad0, Sercom3Pad1};
-use wio::hal::gpio::{Pa16, Pa17, PfD};
+//use wio::hal::sercom::{I2CMaster3, Sercom3Pad0, Sercom3Pad1};
+//use wio::hal::gpio::{Pa16, Pa17, PfD};
+use atsamd_hal::sercom::{
+    v2::{i2c, IoSet3, Sercom3},
+//    PadPin,
+};
+
+use crate::wio::aliases::I2c1Sda;
+use crate::wio::aliases::I2c1Scl;
+pub type I2c1Pads = i2c::Pads<Sercom3, IoSet3, I2c1Sda, I2c1Scl>;
 
 //for debug disp
-use eg::fonts::{Font6x12, Text};
+//use eg::fonts::{Font6x12, Text};
 use eg::pixelcolor::Rgb565;
 use eg::prelude::*;
-use eg::primitives::rectangle::Rectangle;
-use eg::style::{PrimitiveStyleBuilder, TextStyle};
+//use eg::primitives::rectangle::Rectangle;
+//use eg::style::{PrimitiveStyleBuilder, TextStyle};
 
+use eg::mono_font::{ascii::FONT_6X12, MonoTextStyle};
+use eg::primitives::{PrimitiveStyleBuilder, Rectangle};
+use eg::text::Text;
 
 #[entry]
 fn main() -> ! {
@@ -36,14 +47,16 @@ fn main() -> ! {
     );
     let mut delay = Delay::new(core.SYST, &mut clocks);
 
-    let mut sets: Sets = Pins::new(peripherals.PORT).split();
+    let sets: Sets = Pins::new(peripherals.PORT).split();
+    //let sets = wio::Pins::new(peripherals.PORT).split();
+
+
 
 
     let user_i2c = sets.i2c.init(
         &mut clocks,
         peripherals.SERCOM3,
         &mut peripherals.MCLK,
-        &mut sets.port,
     );
 
     // Initialize the LCD display & Terminal for Test
@@ -53,7 +66,6 @@ fn main() -> ! {
             &mut clocks,
             peripherals.SERCOM7,
             &mut peripherals.MCLK,
-            &mut sets.port,
             58.mhz(),
             &mut delay,
         )
@@ -94,7 +106,8 @@ fn u8to_str(numu8 : u8, s: &mut [char;3]){
     }
 }
 
-type I2ctype = I2CMaster3<Sercom3Pad0<Pa17<PfD>>, Sercom3Pad1<Pa16<PfD>>>;
+//type I2ctype = I2CMaster3<Sercom3Pad0<Pa17<PfD>>, Sercom3Pad1<Pa16<PfD>>>;
+type I2ctype = i2c::I2c<i2c::Config<I2c1Pads>>;
 struct SHT3X{
     address : u8,
     i2c : I2ctype,
@@ -131,26 +144,28 @@ impl SHT3X{
     }
 }
 
-struct Terminal {
-    text_style: TextStyle<Rgb565, Font6x12>,
+struct Terminal<'a> {
+    text_style: MonoTextStyle<'a, Rgb565>,
     cursor: Point,
     display: LCD,
     scroller: Scroller,
 }
 
-impl Terminal {
+impl<'a> Terminal<'a> {
     pub fn new(mut display: LCD) -> Self {
         // Clear the screen.
         let style = PrimitiveStyleBuilder::new()
             .fill_color(Rgb565::BLACK)
             .build();
-        let backdrop = Rectangle::new(Point::new(0, 0), Point::new(320, 320)).into_styled(style);
+        let backdrop //= Rectangle::new(Point::new(0, 0), Point::new(320, 320)).into_styled(style);
+
+           = Rectangle::with_corners(Point::new(0, 0), Point::new(320, 320)).into_styled(style);
         backdrop.draw(&mut display).ok().unwrap();
 
         let scroller = display.configure_vertical_scroll(0, 0).unwrap();
 
         Self {
-            text_style: TextStyle::new(Font6x12, Rgb565::WHITE),
+            text_style: MonoTextStyle::new(&FONT_6X12, Rgb565::WHITE),
             cursor: Point::new(0, 0),
             display,
             scroller,
@@ -165,7 +180,7 @@ impl Terminal {
 
     pub fn write_character(&mut self, c: char) {
         if self.cursor.x >= 320 || c == '\n' {
-            self.cursor = Point::new(0, self.cursor.y + Font6x12::CHARACTER_SIZE.height as i32);
+            self.cursor = Point::new(0, self.cursor.y + FONT_6X12.character_size.height as i32);
         }
         if self.cursor.y >= 240 {
             self.animate_clear();
@@ -174,25 +189,24 @@ impl Terminal {
 
         if c != '\n' {
             let mut buf = [0u8; 8];
-            Text::new(c.encode_utf8(&mut buf), self.cursor)
-                .into_styled(self.text_style)
+            Text::new(c.encode_utf8(&mut buf), self.cursor, self.text_style)
                 .draw(&mut self.display)
                 .ok()
                 .unwrap();
 
-            self.cursor.x += (Font6x12::CHARACTER_SIZE.width + Font6x12::CHARACTER_SPACING) as i32;
+            self.cursor.x += (FONT_6X12.character_size.width + FONT_6X12.character_spacing) as i32;
         }
     }
 
     fn animate_clear(&mut self) {
-        for x in (0..320).step_by(Font6x12::CHARACTER_SIZE.width as usize) {
+        for x in (0..320).step_by(FONT_6X12.character_size.width as usize) {
             self.display
-                .scroll_vertically(&mut self.scroller, Font6x12::CHARACTER_SIZE.width as u16)
+                .scroll_vertically(&mut self.scroller, FONT_6X12.character_size.width as u16)
                 .ok()
                 .unwrap();
-            Rectangle::new(
-                Point::new(x + 0, 0),
-                Point::new(x + Font6x12::CHARACTER_SIZE.width as i32, 240),
+            Rectangle::with_corners(
+                Point::new(x, 0),
+                Point::new(x + FONT_6X12.character_size.width as i32, 240),
             )
             .into_styled(
                 PrimitiveStyleBuilder::new()

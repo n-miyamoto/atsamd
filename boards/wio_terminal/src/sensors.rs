@@ -1,7 +1,7 @@
 use atsamd_hal::adc::Adc;
 use atsamd_hal::clock::GenericClockController;
 //use atsamd_hal::gpio::{Floating, Input, Pa12, Pa13, Pa16, Pa17, Pd1, PfB, PfD, Port};
-use atsamd_hal::gpio::v2::{Floating, Input, PA12, PA13, PA16, PA17};
+//use atsamd_hal::gpio::v2::{Floating, Input, PA12, PA13, PA16, PA17};
 use atsamd_hal::prelude::*;
 //use atsamd_hal::sercom::{I2CMaster4, PadPin, Sercom4Pad0, Sercom4Pad1};
 //use atsamd_hal::sercom::{I2CMaster3, Sercom3Pad0, Sercom3Pad1};
