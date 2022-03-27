@@ -3,16 +3,17 @@
 //use atsamd_hal::delay::Delay;
 use atsamd_hal::gpio::*;
 use atsamd_hal::prelude::*;
-use atsamd_hal::target_device::{interrupt, MCLK};
+//use atsamd_hal::target_device::{interrupt, MCLK};
 
 use atsamd_hal::sercom::{PadPin, Sercom0Pad0, Sercom0Pad2, UART0};
-use atsamd_hal::target_device::SERCOM0;
+//use atsamd_hal::target_device::SERCOM0;
 //use atsamd_hal::time::Hertz;
 
-use bbqueue;
-use bbqueue::{
-    consts::{U128, U512, U64},
-    BBBuffer, Consumer, Producer,
+//use bbqueue;
+//use bbqueue::{
+//    consts::{U128, U512, U64},
+//    BBBuffer, Consumer, Producer,
+//};
 use atsamd_hal::{
     clock::GenericClockController,
     delay::Delay,
@@ -126,6 +127,7 @@ impl Wifi {
             tx_buff_isr,
             tx_buff_input,
             sequence,
+            sock_fd:None,
         }
     }
 

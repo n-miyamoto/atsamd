@@ -89,10 +89,18 @@ pub mod aliases {
             }
         }
         PA16 {
-            name: i2c1_scl
+            name: i2c1_scl,
+            aliases: {
+                AlternateD: I2c1Scl,
+                Reset: I2c1SclReset
+            }
         }
         PA17 {
-            name: i2c1_sda
+            name: i2c1_sda,
+            aliases: {
+                AlternateD: I2c1Sda,
+                Reset: I2c1SdaReset
+            }
         }
         PB00 {
             name: spi_miso
